@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <title>Live Stream</title>
 
-  <!-- Shaka (unchanged) -->
+  <!-- Shaka (unchanged core) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.ui.min.js" crossorigin="anonymous"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/controls.min.css" crossorigin="anonymous">
 
@@ -52,18 +52,18 @@
 
     .iframe-wrapper{position:absolute;inset:0;display:none;background:#000;align-items:center;justify-content:center}
 
-    /* pinch target that contains iframe */
+    /* pinch/ratio target that contains the iframe */
     #server2Frame{
       position:relative; width:min(56.25vh, 100%); height:min(100dvh, 100%); aspect-ratio:9/16;
       overflow:hidden; background:#000; touch-action:none; will-change:transform;
     }
     #server2Iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
 
-    /* 9:16 portrait in landscape viewport */
-    .s2-portrait-916{ width:calc(100dvh * 9 / 16) !important; height:100dvh !important; aspect-ratio:9/16 !important; } /* [web:51][web:132] */
-    .s2-land-169{ width:100vw !important; height:100dvh !important; aspect-ratio:auto !important; }
+    /* 9:16 portrait size in landscape viewport */
+    .s2-portrait-916{ width:calc(100dvh * 9 / 16) !important; height:100dvh !important; aspect-ratio:9/16 !important; } /* portrait 9:16 */ /* [web:51][web:132] */
+    .s2-land-169{ width:100vw !important; height:100dvh !important; aspect-ratio:auto !important; }                         /* full fill */
 
-    /* Overlay buttons shown only in Server 2 */
+    /* Server 2 overlay controls */
     .s2-btn{position:fixed;top:12px;right:12px;width:44px;height:44px;border-radius:22px;border:0;background:#d81b60;color:#fff;font-weight:800;z-index:10001;display:none}
     #ratioBtn{ right:64px }
     #zoomResetBtn{ right:116px }
@@ -96,12 +96,12 @@
 
       <!-- Server 2 -->
       <div id="iframeWrapper" class="iframe-wrapper" aria-hidden="true">
-        <div id="server2Frame" class="">
+        <div id="server2Frame">
           <iframe id="server2Iframe" src="" allow="autoplay; fullscreen" allowfullscreen referrerpolicy="no-referrer"></iframe>
         </div>
       </div>
 
-      <!-- Server 2 overlay only -->
+      <!-- Server 2 overlay -->
       <div id="zoomHud" class="zoom-hud">Zoom 100%</div>
       <button id="zoomResetBtn" class="s2-btn">↺</button>
       <button id="ratioBtn" class="s2-btn">9:16</button>
@@ -115,7 +115,7 @@
     <footer style="margin-top:14px;text-align:center;color:#071427;font-weight:700">©</footer>
   </div>
 
-  <!-- Shaka init (unchanged logic) -->
+  <!-- Shaka init (unchanged) -->
   <script>
     (function(){ const set=()=>document.documentElement.style.setProperty('--vh', window.innerHeight+'px'); set(); addEventListener('resize', set); addEventListener('orientationchange', set); })();
 
@@ -127,7 +127,7 @@
       const ui=new shaka.ui.Overlay(player, document.querySelector('.shaka-video-container'), video);
       ui.configure({ controlPanelElements:['play_pause','time_and_duration','mute','volume','spacer','language','captions','picture_in_picture','quality','fullscreen'] });
 
-      // demo headers/stream (keep as in your original)
+      // Demo headers/stream (as in original); keep your real ones
       let cookie="__hdnea__=st=1758392406~exp=1758478806~acl=/*~hmac=48d94f13ec574d6d9798365f006cd430ccd5ca3d776bde0a3335f979bf794bc5";
       player.configure({ drm:{ clearKeys:{ "31b13c6f241055aaa965263f3115e684":"61f0cbc9599925a7be93d45e30b8ebe9" } }});
       player.getNetworkingEngine().registerRequestFilter((t,req)=>{ req.headers['Cookie']=cookie; });
@@ -135,9 +135,9 @@
     });
   </script>
 
-  <!-- Server 2 controls only -->
+  <!-- Server 2 logic (only this part is new) -->
   <script>
-    const SERVICE2_URL = "https://lins.onrender.com/";
+    const SERVICE2_URL = "https://lins.onrender.com/"; // set your server2 page
 
     (function(){
       const server2Btn=document.getElementById('server2Btn');
@@ -154,8 +154,8 @@
 
       let open=false, land=false, portrait916=true;
 
-      async function lockLandscape(){ try{ if(screen.orientation?.lock) await screen.orientation.lock('landscape-primary'); }catch(e){} } /* user gesture */ /* [web:63] */
-      function unlock(){ try{ screen.orientation?.unlock?.(); }catch(e){} } /* [web:25] */
+      async function lockLandscape(){ try{ if(screen.orientation?.lock) await screen.orientation.lock('landscape-primary'); }catch(e){} } // user gesture [web:63]
+      function unlock(){ try{ screen.orientation?.unlock?.(); }catch(e){} } // [web:25]
 
       function enterLandscape(){
         if(land) return;
@@ -182,7 +182,7 @@
           iframe.src = SERVICE2_URL + (SERVICE2_URL.includes('?')?'&':'?') + 'autoplay=1';
           enterLandscape(); await lockLandscape();
           portrait916=true; applyRatio();
-          scale=1; dx=0; dy=0; applyTransform();  // reset zoom
+          scale=1; dx=0; dy=0; applyTransform(); // reset zoom
           server2Btn.textContent='Close Server 2';
         }else{
           iframe.src=''; iframeWrapper.style.display='none'; iframeWrapper.setAttribute('aria-hidden','true');
@@ -192,18 +192,14 @@
         }
       });
 
-      // Buttons
+      // Overlay controls
       ratioBtn.addEventListener('click', ()=>{ if(!open) return; portrait916=!portrait916; scale=1; dx=0; dy=0; applyTransform(); applyRatio(); });
       closeLandBtn.addEventListener('click', ()=>{ if(!open) return; land ? exitLandscape() : (enterLandscape(), lockLandscape()); });
       zoomResetBtn.addEventListener('click', ()=>{ scale=1; dx=0; dy=0; applyTransform(); });
 
-      // Pinch zoom + pan on Server 2 frame (Pointer Events)
-      let scale=1, dx=0, dy=0, cache=[], prev=-1, MIN=1, MAX=3;
-
-      function applyTransform(){
-        server2Frame.style.transform = `translate(${dx}px,${dy}px) scale(${scale})`;
-        zoomHud.textContent = `Zoom ${Math.round(scale*100)}%`;
-      }
+      // Pinch zoom + pan (Pointer Events) on Server 2 frame
+      let scale=1, dx=0, dy=0, cache=[], prev=-1, MIN=1, MAX=3;   // [web:72]
+      function applyTransform(){ server2Frame.style.transform=`translate(${dx}px,${dy}px) scale(${scale})`; zoomHud.textContent=`Zoom ${Math.round(scale*100)}%`; }
       function upd(ev){ const i=cache.findIndex(c=>c.pointerId===ev.pointerId); if(i>-1) cache[i]=ev; else cache.push(ev); }
       function rm(ev){ const i=cache.findIndex(c=>c.pointerId===ev.pointerId); if(i>-1) cache.splice(i,1); if(cache.length<2) prev=-1; }
 
@@ -213,10 +209,7 @@
         if(cache.length===2){
           ev.preventDefault();
           const d=Math.hypot(cache[0].clientX-cache[1].clientX, cache[0].clientY-cache[1].clientY);
-          if(prev>0){
-            const ns=Math.min(MAX, Math.max(MIN, scale*(d/prev)));
-            dx *= (ns/scale); dy *= (ns/scale); scale=ns; applyTransform();
-          }
+          if(prev>0){ const ns=Math.min(MAX, Math.max(MIN, scale*(d/prev))); dx*=(ns/scale); dy*=(ns/scale); scale=ns; applyTransform(); }
           prev=d;
         }else if(cache.length===1){
           dx += ev.movementX; dy += ev.movementY; applyTransform();

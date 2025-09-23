@@ -3,47 +3,46 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Two Players (Shaka + HLS)</title>
+  <title>Two Players (Single HTML)</title>
 
-  <!-- Shaka Player UI bundle -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.ui.min.js" crossorigin="anonymous"></script>
+  <!-- Shaka Player -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.ui.min.js" crossorigin="anonymous"></script> <!-- basic usage bundle -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/controls.min.css" crossorigin="anonymous">
 
   <style>
     body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:#f5f7fb;color:#0b1220}
     .page{max-width:980px;margin:20px auto;padding:12px}
     h1{font-size:18px;margin:0 0 12px}
-    .grid{display:grid;grid-template-columns:1fr;gap:14px}
     .box{background:#000;border-radius:12px;overflow:hidden;box-shadow:0 8px 28px rgba(7,20,40,.12)}
     .player{position:relative;padding-top:56.25%}
     .player > .shaka-video-container,
     .player > .alt{position:absolute;inset:0}
     .alt{display:flex;align-items:center;justify-content:center;background:#000}
-    video, iframe{width:100%;height:100%;display:block;background:#000;border:0}
-    .row{display:flex;gap:10px;align-items:center}
+    video{width:100%;height:100%;display:block;background:#000}
+    .row{display:flex;gap:10px;align-items:center;margin:10px 0}
     button{padding:10px 14px;border:0;border-radius:10px;background:#0b1220;color:#fff;font-weight:700;cursor:pointer}
     .muted{opacity:.75}
   </style>
 </head>
 <body>
   <div class="page">
-    <h1>Two Players Demo (Player 1 + Server 2)</h1>
+    <h1>Two Players (Shaka + Native)</h1>
 
-    <!-- Player 1: Shaka -->
+    <!-- Player 1 (Shaka) -->
     <div class="box">
       <div class="player">
         <div class="shaka-video-container" data-shaka-player>
-          <video id="p1" autoplay playsinline poster=""></video>
+          <video id="p1" autoplay playsinline></video>
         </div>
       </div>
     </div>
 
     <div class="row">
       <button id="s2btn">Server 2</button>
-      <span class="muted">Player 2 opens below and plays second link. Close to stop.</span>
+      <span class="muted">Toggle second player.</span>
     </div>
 
-    <!-- Player 2: Native video with .m3u8 (uses browser HLS; on Chrome/Android it works; on desktop Chrome you may need MediaSource HLS support) -->
+    <!-- Player 2 (Native) -->
     <div class="box" id="p2box" style="display:none">
       <div class="player">
         <div class="alt">
@@ -54,42 +53,38 @@
   </div>
 
   <script>
-    // Links provided
-    const LINK_P1 = "https://liveakdai.slivcdn.com:443/hls/live/2119931/cricacc12309/ENG/hdntl=exp=1758723089~acl=%2f*~id=35455929102235029619138135021502~data=hdntl,2119931,cricacc12309,ENG~hmac=c1f85ac52102475902e493a65a8f626fc0880cc39390350cf16ffe1e18337a16/std_lrh-800300010_1080_2944000.m3u8";
-    const LINK_P2 = "https://liveakdai.slivcdn.com:443/hls/live/2119921/cricacc12309/HIN/hdntl=exp=1758723378~acl=%2f*~id=35455929102235029619138135021502~data=hdntl,2119921,cricacc12309,HIN~hmac=0dd5bde61d4fe358a66e729ed8e3b8b679f4e65ca98cd38d2f26b18ed550ef1a/std_lrh-800300010_360_460000.m3u8";
+    // अगर CORS error आए तो यहाँ अपने Render proxy का URL दें, जैसे: "https://YOUR-APP.onrender.com/hls?url="; वरना "" रहने दें [web:332][web:354].
+    const PROXY_BASE = "";
 
-    // Player 1: Shaka setup
+    // केवल इन दो लिंक को बदलें
+    const RAW_P1 = "https://example.com/path/to/first.m3u8";  // Player 1 (Shaka) [edit]
+    const RAW_P2 = "https://example.com/path/to/second.m3u8"; // Server 2 (native) [edit]
+
+    const LINK_P1 = PROXY_BASE ? (PROXY_BASE + encodeURIComponent(RAW_P1)) : RAW_P1;
+    const LINK_P2 = PROXY_BASE ? (PROXY_BASE + encodeURIComponent(RAW_P2)) : RAW_P2;
+
+    // Player 1: Shaka basic usage — attach + load [web:209].
     document.addEventListener('DOMContentLoaded', async () => {
-      shaka.polyfill.installAll(); // install polyfills [web:209]
-      if (!shaka.Player.isBrowserSupported()) { console.error('Browser not supported'); return; } // [web:209]
-
+      shaka.polyfill.installAll();                                      // polyfills [web:209]
+      if (!shaka.Player.isBrowserSupported()) { console.error('Browser not supported'); return; } // support check [web:209]
       const video = document.getElementById('p1');
-      const player = new shaka.Player();               // create player [web:209]
-      await player.attach(video);                       // attach to element [web:209]
-
-      // Basic UI
+      const player = new shaka.Player(); await player.attach(video);     // create/attach [web:209]
       const ui = new shaka.ui.Overlay(player, document.querySelector('[data-shaka-player]'), video);
-      ui.configure({ controlPanelElements:['play_pause','time_and_duration','mute','volume','spacer','quality','fullscreen'] }); // [web:209]
-
-      try {
-        await player.load(LINK_P1);                    // load HLS URL [web:227][web:295]
-        video.muted = true; await video.play().catch(()=>{});
-      } catch (e) { console.error(e); }
+      ui.configure({ controlPanelElements:['play_pause','time_and_duration','mute','volume','spacer','quality','fullscreen'] }); // basic controls [web:209]
+      try{ await player.load(LINK_P1); video.muted=true; await video.play().catch(()=>{}); }catch(e){ console.error(e); }
     });
 
-    // Player 2: toggle open/close, set src to second link
+    // Player 2: native toggle (जरूरत हो तो इसे भी Shaka में बदल सकते हैं) [web:209].
     const s2btn = document.getElementById('s2btn');
     const p2box = document.getElementById('p2box');
     const p2 = document.getElementById('p2');
-    let s2Open = false;
+    let s2Open=false;
 
     s2btn.addEventListener('click', ()=>{
-      s2Open = !s2Open;
+      s2Open=!s2Open;
       if(s2Open){
         p2box.style.display='block';
-        // Many mobile browsers play HLS natively in <video>; if not, user may need a player library.
-        p2.src = LINK_P2;
-        p2.play().catch(()=>{});
+        p2.src = LINK_P2; p2.play().catch(()=>{});
         s2btn.textContent = 'Close Server 2';
       }else{
         p2.pause(); p2.removeAttribute('src'); p2.load();

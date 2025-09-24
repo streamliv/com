@@ -2,52 +2,231 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>HLS ABR Player with Fallback</title>
+  <title>Live HLS • ABR • Quality Switch</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    html, body { height:100%; margin:0; background:#000; }
-    #wrap { display:flex; align-items:center; justify-content:center; height:100%; padding:12px; }
-    video { width: min(100vw, 960px); height: auto; background:#000; }
-    .note { color:#bbb; font:14px/1.4 system-ui, sans-serif; margin-top:8px; text-align:center; }
+    :root {
+      --sky: #e6f7ff;
+      --bubble: rgba(255,255,255,0.65);
+      --accent: #0ea5e9;
+      --text: #0b1220;
+      --note: #6b7280;
+      --btn-red: #e11d48;
+      --btn-red-hover: #be123c;
+      --badge: #22c55e;
+    }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: linear-gradient(180deg, #dff6ff 0%, #bfeaff 50%, #a3ddff 100%);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+      color: var(--text);
+      overflow: hidden;
+    }
+    /* Water bubble background */
+    .bubbles {
+      position: fixed; inset: 0; overflow: hidden; z-index: 0; pointer-events: none;
+    }
+    .bubble {
+      position: absolute; bottom: -10vh; border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, var(--bubble) 0%, rgba(255,255,255,0.25) 60%, rgba(255,255,255,0.05) 100%);
+      box-shadow: inset 0 0 10px rgba(255,255,255,0.7), 0 4px 12px rgba(14,165,233,0.15);
+      animation: rise linear infinite, drift ease-in-out infinite;
+      will-change: transform;
+    }
+    @keyframes rise {
+      0% { transform: translateY(0) translateX(0) scale(1); opacity: 0.9; }
+      100% { transform: translateY(-120vh) translateX(0) scale(1.1); opacity: 0.0; }
+    }
+    @keyframes drift {
+      0%, 100% { transform: translateX(0); }
+      50% { transform: translateX(30px); }
+    }
+    /* Layout */
+    .wrap { position: relative; z-index: 1; min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .card {
+      width: min(100%, 1080px);
+      background: rgba(255,255,255,0.65);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(14,165,233,0.25);
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(14,165,233,0.25);
+      padding: 16px;
+    }
+    .header {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px;
+    }
+    .title {
+      margin: 0;
+      font-size: 22px;
+      background: linear-gradient(90deg, #0ea5e9, #22c55e, #a855f7, #f97316);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .badge {
+      padding: 6px 10px; border-radius: 999px; background: var(--badge); color: #fff; font-weight: 600; font-size: 12px;
+    }
+
+    /* Promo buttons */
+    .promo {
+      display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px;
+    }
+    .promo a {
+      text-decoration: none;
+      color: #fff;
+      background: var(--btn-red);
+      padding: 10px 14px;
+      border-radius: 10px; /* 10px as requested */
+      font-weight: 700;
+      box-shadow: 0 6px 14px rgba(225,29,72,0.3);
+      transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+    }
+    .promo a:hover { background: var(--btn-red-hover); transform: translateY(-2px); box-shadow: 0 10px 18px rgba(190,18,60,0.35); }
+
+    /* Player */
+    .player {
+      position: relative;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(2,6,23,0.5);
+    }
+    video {
+      width: 100%;
+      height: auto;
+      background: #000;
+      display: block;
+    }
+    .controls {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 10px 0 2px;
+    }
+    .note { color: var(--note); font-size: 13px; }
+
+    /* Quality menu */
+    .qwrap { display: flex; align-items: center; gap: 8px; }
+    .qbtn, .premium {
+      appearance: none; border: none; cursor: pointer;
+      color: #fff; font-weight: 700; border-radius: 10px; padding: 8px 12px;
+      background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+      box-shadow: 0 6px 14px rgba(2,132,199,0.35);
+      transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+    }
+    .qbtn:hover, .premium:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(2,132,199,0.45); }
+    .qmenu {
+      display: inline-flex; gap: 6px; flex-wrap: wrap;
+    }
+    .qopt {
+      appearance: none; border: none; cursor: pointer;
+      color: #0b1220; font-weight: 700; border-radius: 10px; padding: 8px 12px;
+      background: #e2f2ff; border: 1px solid #93c5fd;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+    .qopt.active { background: #0ea5e9; color: #fff; border-color: #0284c7; }
+
+    /* Colorful subtext */
+    .rainbow {
+      font-weight: 800;
+      background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e, #3b82f6, #a855f7, #ec4899);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
-  <div id="wrap">
-    <div>
-      <video id="video" controls playsinline>
-        <!-- Browser-native fallbacks if HLS.js cannot run -->
-        <source id="mp4Fallback" src="fallback-720p.mp4" type="video/mp4" />
-        <source id="webmFallback" src="fallback-720p.webm" type="video/webm" />
-        <!-- Optional: a final text fallback -->
-        Sorry, this browser does not support embedded video.
-      </video>
-      <div class="note">If the HLS stream cannot play, the player will try MP4/WebM fallbacks above.</div>
+  <!-- Animated bubbles layer -->
+  <div class="bubbles" id="bubbles"></div>
+
+  <div class="wrap">
+    <div class="card">
+      <div class="header">
+        <h1 class="title">Live Stream • Smooth ABR • User Quality Control</h1>
+        <span class="badge">LIVE</span>
+      </div>
+
+      <div class="promo">
+        <a href="https://t.me/+faHM0DpI-9swY2E1" target="_blank" rel="noopener">Join Now</a>
+        <a href="https://t.me/+faHM0DpI-9swY2E1" target="_blank" rel="noopener">Get Updates</a>
+        <a href="https://t.me/+faHM0DpI-9swY2E1" target="_blank" rel="noopener">Exclusive Access</a>
+        <a href="https://t.me/+faHM0DpI-9swY2E1" target="_blank" rel="noopener">Connect on Telegram</a>
+      </div>
+
+      <div class="player">
+        <video id="video" controls playsinline>
+          <source id="mp4Fallback" src="fallback-720p.mp4" type="video/mp4" />
+          <source id="webmFallback" src="fallback-720p.webm" type="video/webm" />
+          Sorry, this browser does not support embedded video.
+        </video>
+      </div>
+
+      <div class="controls">
+        <div class="qwrap">
+          <button class="premium" onclick="window.open('https://t.me/+faHM0DpI-9swY2E1','_blank','noopener')">Become Premium Member</button>
+          <div class="qmenu" id="qmenu">
+            <button class="qopt active" data-q="auto">Auto</button>
+            <button class="qopt" data-q="1080p">1080p</button>
+            <button class="qopt" data-q="360p">360p</button>
+          </div>
+        </div>
+        <div class="note">If HLS can’t play, fallback MP4/WebM will be used. Seamless switching tries to keep the live stream steady.</div>
+      </div>
+
+      <p class="note"><span class="rainbow">Enjoy a colorful, user‑friendly experience—tap a quality to switch instantly.</span></p>
     </div>
   </div>
 
   <script>
-    const hlsUrl = "https://sonymtpristinenew.akamaized.net/hls/live/2119921/cricacc12409/HIN/std_lrh-800300010_1080_4140000.m3u8";
-    const video = document.getElementById("video");
+    // Stream URLs
+    const AUTO_URL = "https://sonymtpristinenew.akamaized.net/hls/live/2119921/cricacc12409/HIN/std_lrh-800300010_1080_4140000.m3u8"; // Assuming master/variant-capable
+    const Q1080_URL = "https://sonymtpristinenew.akamaized.net:443/hls/live/2119921/cricacc12409/HIN/std_lrh-800300010_1080_4140000.m3u8";
+    const Q360_URL  = "https://sonymtpristinenew.akamaized.net:443/hls/live/2119921/cricacc12409/HIN/std_lrh-800300010_360_460000.m3u8";
 
-    async function tryHls() {
-      // Native HLS (Safari/iOS)
+    const video = document.getElementById("video");
+    const qmenu = document.getElementById("qmenu");
+    let hls = null;
+    let currentMode = "auto"; // 'auto', '1080p', '360p'
+    let isLive = true;
+
+    // Initialize with AUTO
+    initHls(AUTO_URL, true);
+
+    function initHls(src, autoplay = false) {
+      destroyHls();
+
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = hlsUrl;
-        await video.play().catch(()=>{});
-        return true;
+        // Native HLS (Safari/iOS)
+        video.src = src;
+        if (autoplay) safePlay();
+        wireVideoErrorFallback();
+        return;
       }
-      // hls.js on MSE browsers (Chrome/Firefox/Edge/Android)
+
       if (window.Hls && Hls.isSupported()) {
-        const hls = new Hls({
-          // Enable ABR
-          abrEwmaDefaultEstimate: 5000000,   // starting estimate
-          maxBufferLength: 30,
-          lowLatencyMode: true
+        hls = new Hls({
+          lowLatencyMode: true,
+          liveDurationInfinity: true,
+          maxLiveSyncPlaybackRate: 1.5,
+          // ABR tuned for live
+          maxBufferLength: 15,
+          maxBufferSize: 60 * 1000 * 1000, // 60MB
+          backBufferLength: 0
         });
-        hls.loadSource(hlsUrl);
+        hls.loadSource(src);
         hls.attachMedia(video);
-        hls.on(Hls.Events.ERROR, (evt, data) => {
+
+        hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => {
+          // Keep AUTO unless user forces a quality
+          if (currentMode === "auto") {
+            hls.currentLevel = -1; // auto
+          }
+          if (autoplay) safePlay();
+        });
+
+        hls.on(Hls.Events.LEVEL_SWITCHED, (_e, d) => {
+          // Keep playing smoothly; noop here
+        });
+
+        hls.on(Hls.Events.ERROR, (_evt, data) => {
           if (data.fatal) {
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
@@ -57,39 +236,128 @@
                 hls.recoverMediaError();
                 break;
               default:
-                hls.destroy();
+                destroyHls();
+                break;
             }
           }
         });
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          // hls.js ABR automatically selects best level; no manual action needed
-          video.play().catch(()=>{});
-        });
-        return true;
+
+        wireVideoErrorFallback();
+        return;
       }
-      return false;
+
+      // If neither native HLS nor hls.js is available, rely on <source> fallbacks
+      video.load();
+      safePlay();
+      wireVideoErrorFallback();
     }
 
-    (async () => {
-      const ok = await tryHls();
-      if (!ok) {
-        // Let browser attempt the <source> fallbacks (MP4/WebM)
-        // Optionally: choose one via canPlayType or HEAD check before play
-        video.load();
-        video.play().catch(()=>{});
+    function destroyHls() {
+      if (hls) {
+        try { hls.destroy(); } catch(e) {}
+        hls = null;
       }
+      // Reset element to drop previous MSE buffers for clean switch
+      const t = video.currentTime;
+      const wasPaused = video.paused;
+      const parent = video.parentNode;
+      const next = video.cloneNode(true);
+      next.id = "video";
+      parent.replaceChild(next, video);
+      window.video = next;
+      // restore references
+      bindErrorAgain();
+      // resume from near-live head for live
+      if (!wasPaused) safePlay(next);
+    }
 
-      // Optional: runtime fallback if HLS errors later
-      video.addEventListener('error', () => {
-        // Switch to first fallback source programmatically if HLS was set
-        const mp4 = document.getElementById('mp4Fallback');
+    function bindErrorAgain() {
+      // Ensure the global reference points to the new element
+      const el = document.getElementById("video");
+      el.addEventListener("error", () => {
+        const mp4 = document.getElementById("mp4Fallback");
         if (mp4 && mp4.src) {
-          video.src = mp4.src;
-          video.load();
-          video.play().catch(()=>{});
+          el.src = mp4.src;
+          el.load();
+          safePlay(el);
         }
       }, true);
-    })();
+    }
+
+    function wireVideoErrorFallback() {
+      const el = document.getElementById("video");
+      el.addEventListener("error", () => {
+        const mp4 = document.getElementById("mp4Fallback");
+        if (mp4 && mp4.src) {
+          el.src = mp4.src;
+          el.load();
+          safePlay(el);
+        }
+      }, true);
+    }
+
+    function safePlay(el = video) {
+      const p = el.play();
+      if (p && typeof p.then === "function") {
+        p.catch(() => { /* ignore user gesture blocks */ });
+      }
+    }
+
+    // Quality control UI
+    qmenu.addEventListener("click", (e) => {
+      const btn = e.target.closest(".qopt");
+      if (!btn) return;
+      document.querySelectorAll(".qopt").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const q = btn.dataset.q; // auto | 1080p | 360p
+      switchQuality(q);
+    });
+
+    function switchQuality(mode) {
+      currentMode = mode;
+      const wasPaused = document.getElementById("video").paused;
+
+      if (mode === "auto") {
+        // Use AUTO URL (ideally a multi-variant master). Force auto-level.
+        initHls(AUTO_URL, !wasPaused);
+        return;
+      }
+
+      if (mode === "1080p") {
+        // Explicit 1080p variant
+        initHls(Q1080_URL, !wasPaused);
+        // If multi-variant manifest is used instead, you could select by height:
+        // if (hls) { const i = hls.levels.findIndex(l => l.height === 1080); if (i >= 0) hls.currentLevel = i; }
+        return;
+      }
+
+      if (mode === "360p") {
+        // Explicit 360p variant
+        initHls(Q360_URL, !wasPaused);
+        // Or, when using a master playlist:
+        // if (hls) { const i = hls.levels.findIndex(l => l.height === 360); if (i >= 0) hls.currentLevel = i; }
+        return;
+      }
+    }
+
+    // Create some bubbles
+    function spawnBubbles() {
+      const container = document.getElementById("bubbles");
+      const count = 24;
+      for (let i = 0; i < count; i++) {
+        const b = document.createElement("div");
+        b.className = "bubble";
+        const size = 10 + Math.random() * 40; // 10–50px
+        b.style.width = size + "px";
+        b.style.height = size + "px";
+        b.style.left = Math.random() * 100 + "vw";
+        const dur = 10 + Math.random() * 18; // 10–28s
+        b.style.animationDuration = dur + "s, " + (4 + Math.random()*4) + "s";
+        b.style.animationDelay = (-Math.random()*dur) + "s, 0s";
+        container.appendChild(b);
+      }
+    }
+    spawnBubbles();
   </script>
 </body>
 </html>

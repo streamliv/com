@@ -1,97 +1,176 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <title>HLS Player with Aspect Selector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Two Players (Single HTML)</title>
-
-  <!-- Shaka Player -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.ui.min.js" crossorigin="anonymous"></script> <!-- basic usage bundle -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/controls.min.css" crossorigin="anonymous">
-
+  <!-- hls.js fallback for browsers without native HLS -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
-    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:#f5f7fb;color:#0b1220}
-    .page{max-width:980px;margin:20px auto;padding:12px}
-    h1{font-size:18px;margin:0 0 12px}
-    .box{background:#000;border-radius:12px;overflow:hidden;box-shadow:0 8px 28px rgba(7,20,40,.12)}
-    .player{position:relative;padding-top:56.25%}
-    .player > .shaka-video-container,
-    .player > .alt{position:absolute;inset:0}
-    .alt{display:flex;align-items:center;justify-content:center;background:#000}
-    video{width:100%;height:100%;display:block;background:#000}
-    .row{display:flex;gap:10px;align-items:center;margin:10px 0}
-    button{padding:10px 14px;border:0;border-radius:10px;background:#0b1220;color:#fff;font-weight:700;cursor:pointer}
-    .muted{opacity:.75}
+    :root{
+      --bg:#0f1115; --panel:#171923; --text:#e7eaf0; --muted:#aab0c0; --accent:#4f8cff;
+      --radius:12px; --gap:12px; --player-max:960px; --cinema-max:1200px;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+    .app{min-height:100%;display:flex;flex-direction:column;align-items:center;padding:24px;}
+    .wrap{width:100%;max-width:var(--player-max);transition:max-width .25s ease;}
+    .wrap.cinema{max-width:var(--cinema-max);}
+    .toolbar{display:flex;flex-wrap:wrap;gap:var(--gap);align-items:center;justify-content:space-between;margin-bottom:var(--gap);}
+    .left,.right{display:flex;gap:var(--gap);align-items:center}
+    .panel{background:var(--panel);border-radius:var(--radius);padding:8px 10px;display:flex;gap:8px;align-items:center}
+    .label{color:var(--muted);font-size:12px}
+    select,button{appearance:none;border:1px solid #2a2f3a;background:#1a1f2c;color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer}
+    button:hover,select:hover{border-color:#3a4252}
+    .toggle.active{outline:2px solid var(--accent)}
+    .player-shell{position:relative;width:100%;background:#000;border-radius:var(--radius);overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+    .player-aspect{aspect-ratio:16/9;width:100%;}
+    .stretch .player-aspect{aspect-ratio:auto}
+    .ar-16x9 .player-aspect{aspect-ratio:16/9}
+    .ar-4x3  .player-aspect{aspect-ratio:4/3}
+    .ar-21x9 .player-aspect{aspect-ratio:21/9}
+    video{display:block;width:100%;height:100%;background:#000}
+    .controls{margin-top:var(--gap);display:flex;gap:var(--gap);flex-wrap:wrap}
+    .join-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--gap);width:100%}
+    .join-btn{background:#202538;border:1px solid #2c3142;color:var(--text);border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:transform .08s ease,border-color .2s ease,background .2s ease;font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+    .join-btn:hover{transform:translateY(-1px);border-color:#3b425a;background:#232a42}
+    .status{color:var(--muted);font-size:12px}
+    .player-shell:fullscreen,.player-shell:-webkit-full-screen{border-radius:0;width:100%;height:100%}
+    .cinema .player-shell{box-shadow:0 16px 40px rgba(0,0,0,.6)}
+    @media (max-width:600px){.wrap{max-width:100%}}
   </style>
 </head>
 <body>
-  <div class="page">
-    <h1>Two Players (Shaka + Native)</h1>
-
-    <!-- Player 1 (Shaka) -->
-    <div class="box">
-      <div class="player">
-        <div class="shaka-video-container" data-shaka-player>
-          <video id="p1" autoplay playsinline></video>
+  <div class="app">
+    <div id="wrap" class="wrap">
+      <div class="toolbar">
+        <div class="left panel">
+          <span class="label">Aspect</span>
+          <select id="aspectSelect" aria-label="Aspect ratio">
+            <option value="16x9" selected>16:9</option>
+            <option value="4x3">4:3</option>
+            <option value="21x9">21:9</option>
+            <option value="stretch">Stretch</option>
+          </select>
+        </div>
+        <div class="right panel">
+          <button id="cinemaBtn" class="toggle" title="Cinema mode">Cinema</button>
+          <button id="fsBtn" title="Fullscreen">Fullscreen</button>
         </div>
       </div>
-    </div>
 
-    <div class="row">
-      <button id="s2btn">Server 2</button>
-      <span class="muted">Toggle second player.</span>
-    </div>
+      <div id="playerShell" class="player-shell ar-16x9">
+        <div class="player-aspect">
+          <video id="video" controls playsinline></video>
+        </div>
+      </div>
 
-    <!-- Player 2 (Native) -->
-    <div class="box" id="p2box" style="display:none">
-      <div class="player">
-        <div class="alt">
-          <video id="p2" controls playsinline autoplay></video>
+      <div class="controls">
+        <div class="panel status" id="status">Ready</div>
+      </div>
+
+      <div class="controls">
+        <div class="join-grid">
+          <!-- The requested link is wired to button A -->
+          <button class="join-btn" data-src="https://livecfdai-par-mp.slivcdn.com:443/out/v1/87328391091c42ddb72015a2d95c6958/std_lrl-800300010_11.m3u8?hdntl=exp=1758765502~acl=*~hmac=29d787286ffc81d07304558004cb49a37ba9118fd31df33685d4ef389372fac9&originpath=/linear/hls/pb/event/yk9L2U37Sgilimx_SKGHhw/stream/c6010f61-5f37-42f4-871f-c6012cf692e6:TPE2/variant/55d197292ea516bf17f0bcc686b54813/bandwidth/4055040.m3u8">Join Now A</button>
+          <button class="join-btn" data-src="https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8">Join Now B</button>
+          <button class="join-btn" data-src="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">Join Now C</button>
+          <button class="join-btn" data-src="https://test-streams.mux.dev/pts_shift/master.m3u8">Join Now D</button>
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    // अगर CORS error आए तो यहाँ अपने Render proxy का URL दें, जैसे: "https://YOUR-APP.onrender.com/hls?url="; वरना "" रहने दें [web:332][web:354].
-    const PROXY_BASE = "";
+    const wrap = document.getElementById('wrap');
+    const playerShell = document.getElementById('playerShell');
+    const video = document.getElementById('video');
+    const aspectSelect = document.getElementById('aspectSelect');
+    const cinemaBtn = document.getElementById('cinemaBtn');
+    const fsBtn = document.getElementById('fsBtn');
+    const statusBox = document.getElementById('status');
+    const joinButtons = Array.from(document.querySelectorAll('.join-btn'));
+    let hls = null;
 
-    // केवल इन दो लिंक को बदलें
-    const RAW_P1 = "https://example.com/path/to/first.m3u8";  // Player 1 (Shaka) [edit]
-    const RAW_P2 = "https://example.com/path/to/second.m3u8"; // Server 2 (native) [edit]
+    function setStatus(msg){ statusBox.textContent = msg; }
 
-    const LINK_P1 = PROXY_BASE ? (PROXY_BASE + encodeURIComponent(RAW_P1)) : RAW_P1;
-    const LINK_P2 = PROXY_BASE ? (PROXY_BASE + encodeURIComponent(RAW_P2)) : RAW_P2;
+    function applyAspect(value){
+      playerShell.classList.remove('ar-16x9','ar-4x3','ar-21x9','stretch');
+      if (value==='4x3') playerShell.classList.add('ar-4x3');
+      else if (value==='21x9') playerShell.classList.add('ar-21x9');
+      else if (value==='stretch') playerShell.classList.add('stretch');
+      else playerShell.classList.add('ar-16x9');
+    }
+    aspectSelect.addEventListener('change', e=> applyAspect(e.target.value));
 
-    // Player 1: Shaka basic usage — attach + load [web:209].
-    document.addEventListener('DOMContentLoaded', async () => {
-      shaka.polyfill.installAll();                                      // polyfills [web:209]
-      if (!shaka.Player.isBrowserSupported()) { console.error('Browser not supported'); return; } // support check [web:209]
-      const video = document.getElementById('p1');
-      const player = new shaka.Player(); await player.attach(video);     // create/attach [web:209]
-      const ui = new shaka.ui.Overlay(player, document.querySelector('[data-shaka-player]'), video);
-      ui.configure({ controlPanelElements:['play_pause','time_and_duration','mute','volume','spacer','quality','fullscreen'] }); // basic controls [web:209]
-      try{ await player.load(LINK_P1); video.muted=true; await video.play().catch(()=>{}); }catch(e){ console.error(e); }
+    cinemaBtn.addEventListener('click', ()=>{
+      wrap.classList.toggle('cinema');
+      cinemaBtn.classList.toggle('active');
     });
 
-    // Player 2: native toggle (जरूरत हो तो इसे भी Shaka में बदल सकते हैं) [web:209].
-    const s2btn = document.getElementById('s2btn');
-    const p2box = document.getElementById('p2box');
-    const p2 = document.getElementById('p2');
-    let s2Open=false;
+    fsBtn.addEventListener('click', async ()=>{
+      const el = playerShell;
+      try{
+        if (!document.fullscreenElement){
+          await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.());
+        } else {
+          await (document.exitFullscreen?.() || document.webkitExitFullscreen?.());
+        }
+      }catch(err){ console.error(err); }
+    });
 
-    s2btn.addEventListener('click', ()=>{
-      s2Open=!s2Open;
-      if(s2Open){
-        p2box.style.display='block';
-        p2.src = LINK_P2; p2.play().catch(()=>{});
-        s2btn.textContent = 'Close Server 2';
-      }else{
-        p2.pause(); p2.removeAttribute('src'); p2.load();
-        p2box.style.display='none';
-        s2btn.textContent = 'Server 2';
+    function cleanupHls(){
+      if (hls){ hls.destroy(); hls = null; }
+      video.removeAttribute('src');
+      video.load();
+    }
+
+    function loadStream(url){
+      cleanupHls();
+
+      // Prefer native HLS where available (Safari, some platforms)
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+        video.play().catch(()=>{});
+        setStatus('Loaded via native HLS');
+        return;
       }
+
+      // hls.js fallback for MSE-capable browsers
+      if (window.Hls && Hls.isSupported()){
+        hls = new Hls({ lowLatencyMode:true });
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MEDIA_ATTACHED, ()=>{
+          hls.loadSource(url);
+          setStatus('Loading via hls.js…');
+        });
+        hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
+          video.play().catch(()=>{});
+          setStatus('Playing via hls.js');
+        });
+        hls.on(Hls.Events.ERROR, (evt, data)=>{
+          console.warn('HLS error', data);
+          setStatus('Error: '+(data?.details || 'unknown'));
+        });
+        return;
+      }
+
+      setStatus('HLS unsupported. Try Safari or add hls.js.');
+    }
+
+    joinButtons.forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const url = btn.getAttribute('data-src');
+        if (!url || !url.endsWith('.m3u8')){
+          setStatus('Invalid or non-HLS URL');
+          return;
+        }
+        loadStream(url);
+      });
     });
+
+    // Defaults
+    applyAspect('16x9');
+    setStatus('Ready. Choose a stream.');
   </script>
 </body>
 </html>

@@ -2,175 +2,94 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>HLS Player with Aspect Selector</title>
+  <title>HLS ABR Player with Fallback</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- hls.js fallback for browsers without native HLS -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
-    :root{
-      --bg:#0f1115; --panel:#171923; --text:#e7eaf0; --muted:#aab0c0; --accent:#4f8cff;
-      --radius:12px; --gap:12px; --player-max:960px; --cinema-max:1200px;
-    }
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
-    .app{min-height:100%;display:flex;flex-direction:column;align-items:center;padding:24px;}
-    .wrap{width:100%;max-width:var(--player-max);transition:max-width .25s ease;}
-    .wrap.cinema{max-width:var(--cinema-max);}
-    .toolbar{display:flex;flex-wrap:wrap;gap:var(--gap);align-items:center;justify-content:space-between;margin-bottom:var(--gap);}
-    .left,.right{display:flex;gap:var(--gap);align-items:center}
-    .panel{background:var(--panel);border-radius:var(--radius);padding:8px 10px;display:flex;gap:8px;align-items:center}
-    .label{color:var(--muted);font-size:12px}
-    select,button{appearance:none;border:1px solid #2a2f3a;background:#1a1f2c;color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer}
-    button:hover,select:hover{border-color:#3a4252}
-    .toggle.active{outline:2px solid var(--accent)}
-    .player-shell{position:relative;width:100%;background:#000;border-radius:var(--radius);overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.35)}
-    .player-aspect{aspect-ratio:16/9;width:100%;}
-    .stretch .player-aspect{aspect-ratio:auto}
-    .ar-16x9 .player-aspect{aspect-ratio:16/9}
-    .ar-4x3  .player-aspect{aspect-ratio:4/3}
-    .ar-21x9 .player-aspect{aspect-ratio:21/9}
-    video{display:block;width:100%;height:100%;background:#000}
-    .controls{margin-top:var(--gap);display:flex;gap:var(--gap);flex-wrap:wrap}
-    .join-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--gap);width:100%}
-    .join-btn{background:#202538;border:1px solid #2c3142;color:var(--text);border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:transform .08s ease,border-color .2s ease,background .2s ease;font-size:10px;text-transform:uppercase;letter-spacing:.4px}
-    .join-btn:hover{transform:translateY(-1px);border-color:#3b425a;background:#232a42}
-    .status{color:var(--muted);font-size:12px}
-    .player-shell:fullscreen,.player-shell:-webkit-full-screen{border-radius:0;width:100%;height:100%}
-    .cinema .player-shell{box-shadow:0 16px 40px rgba(0,0,0,.6)}
-    @media (max-width:600px){.wrap{max-width:100%}}
+    html, body { height:100%; margin:0; background:#000; }
+    #wrap { display:flex; align-items:center; justify-content:center; height:100%; padding:12px; }
+    video { width: min(100vw, 960px); height: auto; background:#000; }
+    .note { color:#bbb; font:14px/1.4 system-ui, sans-serif; margin-top:8px; text-align:center; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
-  <div class="app">
-    <div id="wrap" class="wrap">
-      <div class="toolbar">
-        <div class="left panel">
-          <span class="label">Aspect</span>
-          <select id="aspectSelect" aria-label="Aspect ratio">
-            <option value="16x9" selected>16:9</option>
-            <option value="4x3">4:3</option>
-            <option value="21x9">21:9</option>
-            <option value="stretch">Stretch</option>
-          </select>
-        </div>
-        <div class="right panel">
-          <button id="cinemaBtn" class="toggle" title="Cinema mode">Cinema</button>
-          <button id="fsBtn" title="Fullscreen">Fullscreen</button>
-        </div>
-      </div>
-
-      <div id="playerShell" class="player-shell ar-16x9">
-        <div class="player-aspect">
-          <video id="video" controls playsinline></video>
-        </div>
-      </div>
-
-      <div class="controls">
-        <div class="panel status" id="status">Ready</div>
-      </div>
-
-      <div class="controls">
-        <div class="join-grid">
-          <!-- The requested link is wired to button A -->
-          <button class="join-btn" data-src="https://livecfdai-par-mp.slivcdn.com:443/out/v1/87328391091c42ddb72015a2d95c6958/std_lrl-800300010_11.m3u8?hdntl=exp=1758765502~acl=*~hmac=29d787286ffc81d07304558004cb49a37ba9118fd31df33685d4ef389372fac9&originpath=/linear/hls/pb/event/yk9L2U37Sgilimx_SKGHhw/stream/c6010f61-5f37-42f4-871f-c6012cf692e6:TPE2/variant/55d197292ea516bf17f0bcc686b54813/bandwidth/4055040.m3u8">Join Now A</button>
-          <button class="join-btn" data-src="https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8">Join Now B</button>
-          <button class="join-btn" data-src="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">Join Now C</button>
-          <button class="join-btn" data-src="https://test-streams.mux.dev/pts_shift/master.m3u8">Join Now D</button>
-        </div>
-      </div>
+  <div id="wrap">
+    <div>
+      <video id="video" controls playsinline>
+        <!-- Browser-native fallbacks if HLS.js cannot run -->
+        <source id="mp4Fallback" src="fallback-720p.mp4" type="video/mp4" />
+        <source id="webmFallback" src="fallback-720p.webm" type="video/webm" />
+        <!-- Optional: a final text fallback -->
+        Sorry, this browser does not support embedded video.
+      </video>
+      <div class="note">If the HLS stream cannot play, the player will try MP4/WebM fallbacks above.</div>
     </div>
   </div>
 
   <script>
-    const wrap = document.getElementById('wrap');
-    const playerShell = document.getElementById('playerShell');
-    const video = document.getElementById('video');
-    const aspectSelect = document.getElementById('aspectSelect');
-    const cinemaBtn = document.getElementById('cinemaBtn');
-    const fsBtn = document.getElementById('fsBtn');
-    const statusBox = document.getElementById('status');
-    const joinButtons = Array.from(document.querySelectorAll('.join-btn'));
-    let hls = null;
+    const hlsUrl = "https://sonymtpristinenew.akamaized.net/hls/live/2119921/cricacc12409/HIN/std_lrh-800300010_1080_4140000.m3u8";
+    const video = document.getElementById("video");
 
-    function setStatus(msg){ statusBox.textContent = msg; }
-
-    function applyAspect(value){
-      playerShell.classList.remove('ar-16x9','ar-4x3','ar-21x9','stretch');
-      if (value==='4x3') playerShell.classList.add('ar-4x3');
-      else if (value==='21x9') playerShell.classList.add('ar-21x9');
-      else if (value==='stretch') playerShell.classList.add('stretch');
-      else playerShell.classList.add('ar-16x9');
-    }
-    aspectSelect.addEventListener('change', e=> applyAspect(e.target.value));
-
-    cinemaBtn.addEventListener('click', ()=>{
-      wrap.classList.toggle('cinema');
-      cinemaBtn.classList.toggle('active');
-    });
-
-    fsBtn.addEventListener('click', async ()=>{
-      const el = playerShell;
-      try{
-        if (!document.fullscreenElement){
-          await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.());
-        } else {
-          await (document.exitFullscreen?.() || document.webkitExitFullscreen?.());
-        }
-      }catch(err){ console.error(err); }
-    });
-
-    function cleanupHls(){
-      if (hls){ hls.destroy(); hls = null; }
-      video.removeAttribute('src');
-      video.load();
-    }
-
-    function loadStream(url){
-      cleanupHls();
-
-      // Prefer native HLS where available (Safari, some platforms)
-      if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = url;
-        video.play().catch(()=>{});
-        setStatus('Loaded via native HLS');
-        return;
+    async function tryHls() {
+      // Native HLS (Safari/iOS)
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = hlsUrl;
+        await video.play().catch(()=>{});
+        return true;
       }
-
-      // hls.js fallback for MSE-capable browsers
-      if (window.Hls && Hls.isSupported()){
-        hls = new Hls({ lowLatencyMode:true });
+      // hls.js on MSE browsers (Chrome/Firefox/Edge/Android)
+      if (window.Hls && Hls.isSupported()) {
+        const hls = new Hls({
+          // Enable ABR
+          abrEwmaDefaultEstimate: 5000000,   // starting estimate
+          maxBufferLength: 30,
+          lowLatencyMode: true
+        });
+        hls.loadSource(hlsUrl);
         hls.attachMedia(video);
-        hls.on(Hls.Events.MEDIA_ATTACHED, ()=>{
-          hls.loadSource(url);
-          setStatus('Loading via hls.js…');
+        hls.on(Hls.Events.ERROR, (evt, data) => {
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                hls.recoverMediaError();
+                break;
+              default:
+                hls.destroy();
+            }
+          }
         });
-        hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          // hls.js ABR automatically selects best level; no manual action needed
           video.play().catch(()=>{});
-          setStatus('Playing via hls.js');
         });
-        hls.on(Hls.Events.ERROR, (evt, data)=>{
-          console.warn('HLS error', data);
-          setStatus('Error: '+(data?.details || 'unknown'));
-        });
-        return;
+        return true;
       }
-
-      setStatus('HLS unsupported. Try Safari or add hls.js.');
+      return false;
     }
 
-    joinButtons.forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const url = btn.getAttribute('data-src');
-        if (!url || !url.endsWith('.m3u8')){
-          setStatus('Invalid or non-HLS URL');
-          return;
-        }
-        loadStream(url);
-      });
-    });
+    (async () => {
+      const ok = await tryHls();
+      if (!ok) {
+        // Let browser attempt the <source> fallbacks (MP4/WebM)
+        // Optionally: choose one via canPlayType or HEAD check before play
+        video.load();
+        video.play().catch(()=>{});
+      }
 
-    // Defaults
-    applyAspect('16x9');
-    setStatus('Ready. Choose a stream.');
+      // Optional: runtime fallback if HLS errors later
+      video.addEventListener('error', () => {
+        // Switch to first fallback source programmatically if HLS was set
+        const mp4 = document.getElementById('mp4Fallback');
+        if (mp4 && mp4.src) {
+          video.src = mp4.src;
+          video.load();
+          video.play().catch(()=>{});
+        }
+      }, true);
+    })();
   </script>
 </body>
 </html>
